@@ -1,0 +1,22 @@
+{
+    "<pad>": 0,
+    "<unk>": 1,
+    "lifestyle": 2,
+    "news": 3,
+    "health": 4,
+    "sports": 5,
+    "weather": 6,
+    "entertainment": 7,
+    "foodanddrink": 8,
+    "autos": 9,
+    "travel": 10,
+    "video": 11,
+    "finance": 12,
+    "tv": 13,
+    "movies": 14,
+    "music": 15,
+    "kids": 16,
+    "middleeast": 17,
+    "games": 18,
+    "northamerica": 19
+}
