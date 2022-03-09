@@ -6,12 +6,19 @@ from data import MIND
 
 
 class DataLoader():
-    def __init__(self, g, negative_sampler, user_sampler, news_sampler):
+    def __init__(
+            self, 
+            g, negative_sampler, user_sampler, news_sampler, 
+            user_news_max_len, neighbor_users_max_len, neighbor_news_max_len):
         assert isinstance(g, dgl.DGLHeteroGraph)
-        self.graph = g
+
+        self.g = g
         self.negative_sampler = negative_sampler
         self.user_sampler, self.news_sampler = user_sampler, news_sampler
         self.pos_users, self.pos_news = g.edges()
+        self.user_news_max_len, self.neighbor_users_max_len, self.neighbor_news_max_len = \
+                user_news_max_len, neighbor_users_max_len, neighbor_news_max_len
+
         self.num_edges = g.num_edges()
         self.eid = np.arange(self.num_edges)
         
@@ -20,39 +27,41 @@ class DataLoader():
         I = np.arange(0, self.num_edges, batch_size)
         for start, end in zip(I[: -2], I[1: ]):
             eid_batch = eid[start: end]
-            pos_users_nid_batch, pos_news_nid_batch = self.graph.find_edges(eid_batch, etype='clicked')
-            neg_users_nid_batch, neg_news_nid_batch = self.negative_sampler(self.graph, eid_batch)
-            users_nid_batch, news_nid_batch = \
-                torch.cat((pos_users_nid_batch, neg_users_nid_batch)), torch.cat((pos_news_nid_batch, neg_news_nid_batch))
-            labels_batch = torch.cat((torch.ones_like(pos_users_nid_batch), torch.zeros_like(neg_users_nid_batch)))
-            shuffled_idx = np.random.permutation(np.arange(0, len(users_nid_batch)))
-            users_nid_batch, labels_batch = users_nid_batch[shuffled_idx], labels_batch[shuffled_idx]
-            
-            # users_neighbor, news_neighbor_news = [], []
-            for user_nid, news_nid in zip(users_nid_batch, news_nid_batch):
-                # users_neighbor.append(self.user_sampler(g, user_nid))
-                # news_neighbor_news.append(self.news_sampler(g, news_nid))
-                user_news_nid, user_neighbor_users_nid = self.user_sampler(g, user_nid)
-                users_news_title = g.ndata['title']['news'][user_news_nid]
-                users_neighbor_users_id = g.ndata['user_id']['user'][user_neighbor_users_nid]
-                news_neighbor_news_nid = self.news_sampler(g, news_nid)
-                news_neighbor_news_id = g.ndata['news_id']['news'][news_neighbor_news_nid]
-                news_neighbor_news_title = g.ndata['title']['news'][news_neighbor_news_nid]
+            pos_user_nid_batch, pos_news_nid_batch = self.g.find_edges(eid_batch, etype='clicked')
+            neg_user_nid_batch, neg_news_nid_batch = self.negative_sampler(self.g, eid_batch)
+            user_nid_batch, news_nid_batch = \
+                torch.cat((pos_user_nid_batch, neg_user_nid_batch)), torch.cat((pos_news_nid_batch, neg_news_nid_batch))
+            label_batch = torch.cat((torch.ones_like(pos_user_nid_batch), torch.zeros_like(neg_user_nid_batch)))
+            total_batch_size = len(user_nid_batch)
+            shuffled_idx = np.random.permutation(np.arange(0, total_batch_size))
+            user_nid_batch, label_batch = user_nid_batch[shuffled_idx], label_batch[shuffled_idx]
+           
+            user_user_id_batch, news_title_batch = \
+                self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch]
+            user_news_title_batch, neighbor_users_user_id_batch = \
+                torch.zeros((total_batch_size, self.user_news_max_len, 30)), torch.zeros((total_batch_size, self.neighbor_users_max_len))
+            user_news_effective_len, neighbor_users_effective_len = \
+                torch.zeros(total_batch_size), torch.zeros(total_batch_size)
+            neighbor_news_title_batch, neighbor_news_news_id_batch = \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len, 30)), torch.zeros((total_batch_size, self.neighbor_news_max_len))
+            neighbor_news_effective_len = torch.zeros(total_batch_size)
+
+            for i, (user_nid, news_nid) in enumerate((zip(user_nid_batch, news_nid_batch))):
+                user_news_nid, neighbor_users_nid = self.user_sampler(self.g, user_nid)
+                user_news_effective_len[i] = len(user_news_nid)
+                user_news_title_batch[i][0: len(user_news_nid)] = self.g.ndata['title']['news'][user_news_nid]
+                neighbor_users_effective_len[i] = len(neighbor_users_nid)
+                neighbor_users_user_id_batch[i][0: len(neighbor_users_nid)] = self.g.ndata['user_id']['user'][neighbor_users_nid]
+
+                neighbor_news_nid = self.news_sampler(g, news_nid)
+                neighbor_news_effective_len[i] = len(neighbor_news_nid)
+                neighbor_news_title_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['title']['news'][neighbor_news_nid]
+                neighbor_news_news_id_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['news_id']['news'][neighbor_news_nid]
                 
-                print('one trun start')
-                print(user_nid, news_nid)
-                print(user_news_nid, user_neighbor_users_nid)
-                print(users_news_title.shape)
-                print(users_neighbor_users_id.shape)
-                print(news_neighbor_news_nid)
-                print(news_neighbor_news_id.shape)
-                print(news_neighbor_news_title.shape)
-                print('one turn over')
-                print()
-
-
-            # yield users_nid_batch, users_neighbor, news_nid_batch, news_neighbor_news, labels_batch
-            yield 1
+            yield user_user_id_batch, \
+                (user_news_title_batch, user_news_effective_len), (neighbor_users_user_id_batch, neighbor_users_effective_len), \
+                news_title_batch, \
+                (neighbor_news_title_batch, neighbor_news_news_id_batch, neighbor_news_effective_len)
 
 
 class NegativeSampler():
@@ -122,6 +131,9 @@ class NewsSampler():
 if __name__ == '__main__':
     mind = MIND()
     g = mind.graphs['train']
-    dataloader = DataLoader(g, NegativeSampler(g, 1), UserSampler(user_limit=15), NewsSampler(news_limit=15))
+    dataloader = DataLoader(
+        g, NegativeSampler(g, 1), UserSampler(user_limit=15), NewsSampler(news_limit=15), 
+        user_news_max_len=5, neighbor_users_max_len=15, neighbor_news_max_len=15)
     a = next(dataloader.load(2))
-    
+    for item in a:
+        print(item)
