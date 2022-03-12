@@ -1,15 +1,16 @@
 import torch
 import dgl
 import numpy as np
-import scipy.sparse as sp
 from data import MIND
+
+import time
 
 
 class DataLoader():
     def __init__(
-            self, 
-            g, negative_sampler, user_sampler, news_sampler, 
-            user_news_max_len, neighbor_users_max_len, neighbor_news_max_len):
+        self, 
+        g, negative_sampler, user_sampler, news_sampler, 
+        user_news_max_len, neighbor_users_max_len, neighbor_news_max_len):
         assert isinstance(g, dgl.DGLHeteroGraph)
 
         self.g = g
@@ -36,32 +37,38 @@ class DataLoader():
             shuffled_idx = np.random.permutation(np.arange(0, total_batch_size))
             user_nid_batch, label_batch = user_nid_batch[shuffled_idx], label_batch[shuffled_idx]
            
-            user_user_id_batch, news_title_batch = \
-                self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch]
-            user_news_title_batch, neighbor_users_user_id_batch = \
-                torch.zeros((total_batch_size, self.user_news_max_len, 30)), torch.zeros((total_batch_size, self.neighbor_users_max_len))
+            user_user_id_batch, news_title_batch, news_topic_batch = \
+                self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch], \
+                self.g.ndata['topic']['news'][news_nid_batch]
+            user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch = \
+                torch.zeros((total_batch_size, self.user_news_max_len, 30)), torch.zeros((total_batch_size, self.user_news_max_len)), \
+                torch.zeros((total_batch_size, self.neighbor_users_max_len))
             user_news_effective_len, neighbor_users_effective_len = \
                 torch.zeros(total_batch_size), torch.zeros(total_batch_size)
-            neighbor_news_title_batch, neighbor_news_news_id_batch = \
-                torch.zeros((total_batch_size, self.neighbor_news_max_len, 30)), torch.zeros((total_batch_size, self.neighbor_news_max_len))
+            neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch = \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len, 30)), torch.zeros((total_batch_size, self.neighbor_news_max_len)), \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len))
             neighbor_news_effective_len = torch.zeros(total_batch_size)
 
             for i, (user_nid, news_nid) in enumerate((zip(user_nid_batch, news_nid_batch))):
                 user_news_nid, neighbor_users_nid = self.user_sampler(self.g, user_nid)
                 user_news_effective_len[i] = len(user_news_nid)
                 user_news_title_batch[i][0: len(user_news_nid)] = self.g.ndata['title']['news'][user_news_nid]
+                user_news_topic_batch[i][0: len(user_news_nid)] = self.g.ndata['topic']['news'][user_news_nid]
                 neighbor_users_effective_len[i] = len(neighbor_users_nid)
                 neighbor_users_user_id_batch[i][0: len(neighbor_users_nid)] = self.g.ndata['user_id']['user'][neighbor_users_nid]
 
-                neighbor_news_nid = self.news_sampler(g, news_nid)
+                neighbor_news_nid = self.news_sampler(self.g, news_nid)
                 neighbor_news_effective_len[i] = len(neighbor_news_nid)
                 neighbor_news_title_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['title']['news'][neighbor_news_nid]
+                neighbor_news_topic_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['topic']['news'][neighbor_news_nid]
                 neighbor_news_news_id_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['news_id']['news'][neighbor_news_nid]
                 
             yield user_user_id_batch, \
-                (user_news_title_batch, user_news_effective_len), (neighbor_users_user_id_batch, neighbor_users_effective_len), \
-                news_title_batch, \
-                (neighbor_news_title_batch, neighbor_news_news_id_batch, neighbor_news_effective_len)
+                (user_news_title_batch, user_news_topic_batch, user_news_effective_len), (neighbor_users_user_id_batch, neighbor_users_effective_len), \
+                (news_title_batch, news_topic_batch), \
+                (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, neighbor_news_effective_len), \
+                label_batch
 
 
 class NegativeSampler():
@@ -87,14 +94,19 @@ class NegativeSampler():
 
 
 class UserSampler():
-    def __init__(self, user_limit):
-        self.user_limit = user_limit
+    def __init__(self, user_limit, news_limit):
+        self.user_limit, self.news_limit = user_limit, news_limit
 
     def __call__(self, g, user_nid):
         assert isinstance(g, dgl.DGLHeteroGraph)
         g1 = dgl.sampling.sample_neighbors(
             g, {'user': user_nid}, {'clicked': -1}, edge_dir='out')
         _, news_nid = g1.edges(order='eid')
+        
+        shuffled_idx = np.random.permutation(np.arange(0, len(news_nid)))
+        news_nid = news_nid[shuffled_idx]
+        news_nid = news_nid[: min(self.news_limit, len(news_nid))]
+
         g2 = dgl.sampling.sample_neighbors(
             g, {'news': news_nid}, {'clicked': -1}, edge_dir='in')
         neighbor_users_nid, _ = g2.edges(order='eid')
@@ -132,8 +144,16 @@ if __name__ == '__main__':
     mind = MIND()
     g = mind.graphs['train']
     dataloader = DataLoader(
-        g, NegativeSampler(g, 1), UserSampler(user_limit=15), NewsSampler(news_limit=15), 
-        user_news_max_len=5, neighbor_users_max_len=15, neighbor_news_max_len=15)
-    a = next(dataloader.load(2))
-    for item in a:
-        print(item)
+        g, NegativeSampler(g, 4), UserSampler(user_limit=15, news_limit=10), NewsSampler(news_limit=15), 
+        user_news_max_len=10, neighbor_users_max_len=15, neighbor_news_max_len=15)
+    t1 = time.time()
+    i = 0
+    for everything in dataloader.load(batch_size=128):
+        i += 1
+        print(i)
+        if i > 100:
+            break
+    t2 = time.time()
+    print(i)
+    print("{}ms".format((t2 -t1) * 1000))
+    

@@ -12,11 +12,11 @@ import json
 
 class MIND():
     def __init__(self):
-        self.data_path = os.getcwd() + '/data/'
+        self.data_path = '/home/sthan/Codefield/python/GERL' + '/data/'
         self.behaviors_path = {'train': 'train/behaviors.tsv', 'dev': 'dev/behaviors.tsv'}
         self.news_path = {'train': 'train/news.tsv', 'dev': 'dev/news.tsv'}
         self.user_id_vocab_path = 'dgl/vocab/user_id_vocab.json'
-        self.news_id_vocab_path = 'dgl/vocab/news_vocab.json'
+        self.news_id_vocab_path = 'dgl/vocab/news_id_vocab.json'
         self.topic_vocab_path = 'dgl/vocab/topic_vocab.json'
         self.word_vocab_path = 'dgl/vocab/word_vocab.json'
         self.graphs_path = {'train': 'dgl/train/graph.bin', 'dev': 'dgl/dev/graph.bin'}
@@ -26,7 +26,7 @@ class MIND():
             with open(self.data_path + self.user_id_vocab_path, 'r', encoding='utf-8') as file:
                 self.user_id_vocab = json.load(file)
             with open(self.data_path + self.news_id_vocab_path, 'r', encoding='utf-8') as file:
-                self.topic_vocab = json.load(file)
+                self.news_id_vocab = json.load(file)
             with open(self.data_path + self.topic_vocab_path, 'r', encoding='utf-8') as file:
                 self.topic_vocab = json.load(file)
             with open(self.data_path + self.word_vocab_path, 'r', encoding='utf-8') as file:
@@ -136,7 +136,7 @@ class MIND():
             json_str = json.dumps(self.user_id_vocab, indent=4)
             file.write(json_str)
         with open(self.data_path + self.news_id_vocab_path, 'w', encoding='utf-8') as file:
-            json_str = json.dumps(self.topic_vocab, indent=4)
+            json_str = json.dumps(self.news_id_vocab, indent=4)
             file.write(json_str)
         with open(self.data_path + self.topic_vocab_path, 'w', encoding='utf-8') as file:
             json_str = json.dumps(self.topic_vocab, indent=4)
