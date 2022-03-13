@@ -52,19 +52,27 @@ class GERL(nn.Module):
 
         return user_code_batch
 
-    def newsEncoder(self, news_title_batch, neighbor_news_title_batch, neighbor_news_news_id_batch):
-        news_title_batch = self.title_embed(news_title_batch)
-        news_title_batch = self.transformer(news_title_batch)
+    def newsEncoder(
+        self, news_title_batch, news_topic_batch, neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch):
+        news_title_batch, news_topic_batch = \
+            self.title_embed(news_title_batch), self.topic_embed(news_topic_batch)
+        news_transformer_batch = self.transformer(news_title_batch, news_topic_batch)
 
-        neighbor_news_title_batch = self.title_embed(neighbor_news_title_batch)
-        neighbor_news_title_batch = self.transformer(neighbor_news_title_batch)
-        neighbor_news_title_batch = self.title_attention(neighbor_news_title_batch)
+        neighbor_news_title_batch, neighbor_news_topic_batch = \
+            self.title_embed(neighbor_news_title_batch), self.topic_embed(neighbor_news_topic_batch)
+        neighbor_transformer_batch = torch.zeros(
+            neighbor_news_title_batch.shape[0], neighbor_news_title_batch.shape[1], 
+            neighbor_news_title_batch.shape[-1] + neighbor_news_topic_batch.shape[-1])
+        for i in range(0, neighbor_news_title_batch.shape[1]):
+            neighbor_transformer_batch[:, i] = self.transformer(
+                neighbor_news_title_batch[:, i], neighbor_news_topic_batch[:, i])
+        neighbor_transformer_batch = self.transformer_attention(neighbor_transformer_batch)
 
         neighbor_news_news_id_batch = self.news_id_embed(neighbor_news_news_id_batch)
         neighbor_news_news_id_batch = self.news_id_attention(neighbor_news_news_id_batch)
 
         news_code_batch = torch.cat(
-            news_title_batch, neighbor_news_title_batch, neighbor_news_news_id_batch)
+            (news_transformer_batch, neighbor_transformer_batch, neighbor_news_news_id_batch), dim=-1)
 
         return news_code_batch
 
@@ -73,10 +81,11 @@ if __name__ == '__main__':
     mind = MIND()
     g = mind.graphs['train']
     assert isinstance(g, dgl.DGLHeteroGraph)
-    user_id_vocab_size, title_vocab_size, topic_vocab_size = \
+    user_id_vocab_size, title_vocab_size, topic_vocab_size,news_id_vocab_size = \
         max(list(mind.user_id_vocab.values())), \
         max(list(mind.word_vocab.values()), key=lambda x: x[0])[0], \
-        max(g.ndata['topic']['news'])
+        max(g.ndata['topic']['news']), \
+        max(g.ndata['news_id']['news'])
 
     print('1')
     dataloader = DataLoader(
@@ -87,7 +96,8 @@ if __name__ == '__main__':
     user_user_id_batch, \
     (user_news_title_batch, user_news_topic_batch, _), \
     (neighbor_users_user_id_batch, _), \
-    (_, _), (_, _, _, _), _ = next(dataloader.load(batch_size=10))
+    (news_title_batch, news_topic_batch), \
+    (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, _), _ = next(dataloader.load(batch_size=10))
     print(user_user_id_batch.shape)
     print(user_news_title_batch.shape)
     print(user_news_topic_batch.shape)
@@ -98,12 +108,20 @@ if __name__ == '__main__':
         title_vocab_size, 300, 4, 256, 
         topic_vocab_size, 100, 
         256, 
-        news_id_vocab_size=100, news_id_embed_dim=100, news_id_out_feat=100)
+        news_id_vocab_size, news_id_embed_dim=100, news_id_out_feat=100)
     user_user_id_batch = torch.tensor(user_user_id_batch, dtype=torch.int)
     user_news_title_batch = torch.tensor(user_news_title_batch, dtype=torch.int)
     user_news_topic_batch = torch.tensor(user_news_topic_batch, dtype=torch.int)
     neighbor_users_user_id_batch = torch.tensor(neighbor_users_user_id_batch, dtype=torch.int)
+    news_title_batch = torch.tensor(news_title_batch, dtype=torch.int)
+    news_topic_batch = torch.tensor(news_topic_batch, dtype=torch.int)
+    neighbor_news_title_batch = torch.tensor(neighbor_news_title_batch, dtype=torch.int)
+    neighbor_news_topic_batch = torch.tensor(neighbor_news_topic_batch, dtype=torch.int)
+    neighbor_news_news_id_batch = torch.tensor(neighbor_news_news_id_batch, dtype=torch.int)
+
     result = model.userEncoder(user_user_id_batch, user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch)
+    print(result.shape)
+    result = model.newsEncoder(news_title_batch, news_topic_batch, neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch)
     print(result.shape)
 
 
