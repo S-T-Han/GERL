@@ -67,10 +67,10 @@ class MIND():
                 dst.append(news_nid)
 
         graph = dgl.heterograph({('user', 'clicked', 'news'): (torch.tensor(src), torch.tensor(dst))})
-        graph.ndata['user_id'] = {'user': torch.tensor(user_id_idx)}
-        graph.ndata['news_id'] = {'news': torch.tensor(news_id_idx)}
-        graph.ndata['topic'] = {'news': torch.tensor(topic_idx)}
-        graph.ndata['title'] = {'news': torch.tensor(title_idx)}
+        graph.ndata['user_id'] = {'user': torch.tensor(user_id_idx, dtype=torch.long)}
+        graph.ndata['news_id'] = {'news': torch.tensor(news_id_idx, dtype=torch.long)}
+        graph.ndata['topic'] = {'news': torch.tensor(topic_idx, dtype=torch.long)}
+        graph.ndata['title'] = {'news': torch.tensor(title_idx, dtype=torch.long)}
 
         return graph
 
@@ -149,16 +149,18 @@ class MIND():
 
     def loadGraph(self, subset):
         glist, _ = dgl.load_graphs(self.data_path + self.graphs_path[subset])
+        g = glist[0]
 
-        return glist[0]
+        return g
 
 
 class GolVe():
     def __init__(self):
-        self.vocab_path = os.getcwd() + '/.vector_cache/glove.6B.300d.txt'
-        self.embedding = self.build_embedding()
+        self.vocab_path = "/home/sthan/Codefield/python/GERL/data" + '/.vector_cache/glove.6B.300d.txt'
+        self.vocab = self.buildVocab()
 
-    def build_embedding(self):
+    def buildVocab(self):
+        print("Building GolVe vocab...")
         vocab = {}
         with open(self.vocab_path, encoding='utf-8') as file:
             for i, line in enumerate(file):
@@ -168,6 +170,19 @@ class GolVe():
 
         return vocab
 
+    def buildEmbedding(self, idx_vocab, embed_dim=300):
+        print("Building GolVe embedding...")
+        embedding = torch.zeros(len(idx_vocab), embed_dim)
+        for word, (idx, _) in idx_vocab.items():
+            embedding[idx] = self.vocab.get(word, torch.zeros(embed_dim))
+
+        return embedding
+
+
 
 if __name__ == '__main__':
     mind = MIND()
+    golve = GolVe()
+    embed = golve.buildEmbedding(mind.word_vocab)
+    print(embed[0: 5, 0: 5])
+    print(embed.shape)

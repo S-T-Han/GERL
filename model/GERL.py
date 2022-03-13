@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import dgl
 
 from utils.nn import TransFormer, Attention
-from data import MIND
+from data import MIND, GolVe
 from dataloading import DataLoader, NewsSampler, UserSampler, NegativeSampler
 
 
@@ -19,19 +19,25 @@ class GERL(nn.Module):
         title_vocab_size, title_embed_dim, title_num_heads, title_out_feat,
         topic_vocab_size, topic_embed_dim,
         transformer_out_feat,
-        news_id_vocab_size, news_id_embed_dim, news_id_out_feat):
+        news_id_vocab_size, news_id_embed_dim, news_id_out_feat, 
+        word_vec):
         super(GERL, self).__init__()
         self.user_id_embed = nn.Embedding(user_id_vocab_size, user_id_embed_dim, padding_idx=0)
         self.user_id_attention = Attention(user_id_embed_dim, user_id_out_feat)
-        self.title_embed = nn.Embedding(title_vocab_size, title_embed_dim, padding_idx=0)
+        self.title_embed = nn.Embedding.from_pretrained(word_vec, freeze=True, padding_idx=0)
         self.topic_embed = nn.Embedding(topic_vocab_size, topic_embed_dim, padding_idx=0)
         self.transformer = TransFormer(title_embed_dim, title_num_heads, title_out_feat)
         self.transformer_attention = Attention(title_embed_dim + topic_embed_dim, transformer_out_feat)
         self.news_id_embed = nn.Embedding(news_id_vocab_size, news_id_embed_dim, padding_idx=0)
         self.news_id_attention = Attention(news_id_embed_dim, news_id_out_feat)
 
+        print(self.title_embed.weight)
+
     def userEncoder(
-        self, user_user_id_batch, user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch):
+        self, 
+        user_user_id_batch, 
+        user_news_title_batch, user_news_topic_batch, 
+        neighbor_users_user_id_batch):
         user_user_id_batch = self.user_id_embed(user_user_id_batch)
 
         user_news_title_batch, user_news_topic_batch = \
@@ -53,7 +59,9 @@ class GERL(nn.Module):
         return user_code_batch
 
     def newsEncoder(
-        self, news_title_batch, news_topic_batch, neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch):
+        self, 
+        news_title_batch, news_topic_batch, 
+        neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch):
         news_title_batch, news_topic_batch = \
             self.title_embed(news_title_batch), self.topic_embed(news_topic_batch)
         news_transformer_batch = self.transformer(news_title_batch, news_topic_batch)
@@ -84,8 +92,8 @@ if __name__ == '__main__':
     user_id_vocab_size, title_vocab_size, topic_vocab_size,news_id_vocab_size = \
         max(list(mind.user_id_vocab.values())), \
         max(list(mind.word_vocab.values()), key=lambda x: x[0])[0], \
-        max(g.ndata['topic']['news']), \
-        max(g.ndata['news_id']['news'])
+        max(list(mind.topic_vocab.values())), \
+        max(list(mind.news_id_vocab.values()))
 
     print('1')
     dataloader = DataLoader(
@@ -98,30 +106,25 @@ if __name__ == '__main__':
     (neighbor_users_user_id_batch, _), \
     (news_title_batch, news_topic_batch), \
     (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, _), _ = next(dataloader.load(batch_size=10))
-    print(user_user_id_batch.shape)
-    print(user_news_title_batch.shape)
-    print(user_news_topic_batch.shape)
-    print(neighbor_users_user_id_batch.shape)
     
+    golve = GolVe()
     model = GERL(
         user_id_vocab_size, 100, 128, 
         title_vocab_size, 300, 4, 256, 
         topic_vocab_size, 100, 
         256, 
-        news_id_vocab_size, news_id_embed_dim=100, news_id_out_feat=100)
-    user_user_id_batch = torch.tensor(user_user_id_batch, dtype=torch.int)
-    user_news_title_batch = torch.tensor(user_news_title_batch, dtype=torch.int)
-    user_news_topic_batch = torch.tensor(user_news_topic_batch, dtype=torch.int)
-    neighbor_users_user_id_batch = torch.tensor(neighbor_users_user_id_batch, dtype=torch.int)
-    news_title_batch = torch.tensor(news_title_batch, dtype=torch.int)
-    news_topic_batch = torch.tensor(news_topic_batch, dtype=torch.int)
-    neighbor_news_title_batch = torch.tensor(neighbor_news_title_batch, dtype=torch.int)
-    neighbor_news_topic_batch = torch.tensor(neighbor_news_topic_batch, dtype=torch.int)
-    neighbor_news_news_id_batch = torch.tensor(neighbor_news_news_id_batch, dtype=torch.int)
+        news_id_vocab_size, 100, 100,
+        word_vec=golve.buildEmbedding(mind.word_vocab))
 
-    result = model.userEncoder(user_user_id_batch, user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch)
+
+    result = model.userEncoder(
+        user_user_id_batch.long(), 
+        user_news_title_batch.long(), user_news_topic_batch.long(), 
+        neighbor_users_user_id_batch.long())
     print(result.shape)
-    result = model.newsEncoder(news_title_batch, news_topic_batch, neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch)
+    result = model.newsEncoder(
+        news_title_batch.long(), news_topic_batch.long(), 
+        neighbor_news_title_batch.long(), neighbor_news_topic_batch.long(), neighbor_news_news_id_batch.long())
     print(result.shape)
 
 
