@@ -20,18 +20,18 @@ class GERL(nn.Module):
         topic_vocab_size, topic_embed_dim,
         transformer_out_feat,
         news_id_vocab_size, news_id_embed_dim, news_id_out_feat, 
-        word_vec):
+        word_vec=None):
+        assert 2 * user_id_embed_dim == (title_embed_dim + topic_embed_dim) + news_id_embed_dim
         super(GERL, self).__init__()
         self.user_id_embed = nn.Embedding(user_id_vocab_size, user_id_embed_dim, padding_idx=0)
         self.user_id_attention = Attention(user_id_embed_dim, user_id_out_feat)
-        self.title_embed = nn.Embedding.from_pretrained(word_vec, freeze=True, padding_idx=0)
+        self.title_embed = nn.Embedding.from_pretrained(word_vec, freeze=True, padding_idx=0) \
+            if word_vec is not None else nn.Embedding(title_vocab_size, title_embed_dim, padding_idx=0)
         self.topic_embed = nn.Embedding(topic_vocab_size, topic_embed_dim, padding_idx=0)
         self.transformer = TransFormer(title_embed_dim, title_num_heads, title_out_feat)
         self.transformer_attention = Attention(title_embed_dim + topic_embed_dim, transformer_out_feat)
         self.news_id_embed = nn.Embedding(news_id_vocab_size, news_id_embed_dim, padding_idx=0)
         self.news_id_attention = Attention(news_id_embed_dim, news_id_out_feat)
-
-        print(self.title_embed.weight)
 
     def userEncoder(
         self, 
@@ -84,6 +84,26 @@ class GERL(nn.Module):
 
         return news_code_batch
 
+    def forward(
+        self, 
+        user_user_id_batch, 
+        user_news_title_batch, user_news_topic_batch, 
+        neighbor_users_user_id_batch, 
+        news_title_batch, news_topic_batch, 
+        neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch):
+        user_code_batch = self.userEncoder(
+            user_user_id_batch, 
+            user_news_title_batch, user_news_topic_batch, 
+            neighbor_users_user_id_batch)
+        news_code_batch = self.newsEncoder(
+            news_title_batch, news_topic_batch, 
+            neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch)
+        score = torch.bmm(user_code_batch.unsqueeze(dim=1), news_code_batch.unsqueeze(dim=2))
+        score = score.squeeze(dim=1)
+        score = torch.sigmoid(score)
+
+        return score
+
 
 if __name__ == '__main__':
     mind = MIND()
@@ -106,25 +126,27 @@ if __name__ == '__main__':
     (neighbor_users_user_id_batch, _), \
     (news_title_batch, news_topic_batch), \
     (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, _), _ = next(dataloader.load(batch_size=10))
+
+    print(g.ndata['news_id']['news'].max())
+    print(neighbor_news_news_id_batch.max().long())
     
     golve = GolVe()
     model = GERL(
-        user_id_vocab_size, 100, 128, 
-        title_vocab_size, 300, 4, 256, 
-        topic_vocab_size, 100, 
-        256, 
-        news_id_vocab_size, 100, 100,
-        word_vec=golve.buildEmbedding(mind.word_vocab))
-
-
-    result = model.userEncoder(
+        user_id_vocab_size, 250, 128, 
+        title_vocab_size, 300, 6, 128, 
+        topic_vocab_size, 100, 128, 
+        news_id_vocab_size, 100, 128, 
+        golve.buildEmbedding(mind.word_vocab))
+    result = model(
         user_user_id_batch.long(), 
         user_news_title_batch.long(), user_news_topic_batch.long(), 
-        neighbor_users_user_id_batch.long())
-    print(result.shape)
-    result = model.newsEncoder(
-        news_title_batch.long(), news_topic_batch.long(), 
+        neighbor_users_user_id_batch.long(), 
+        news_title_batch, news_topic_batch.long(), 
         neighbor_news_title_batch.long(), neighbor_news_topic_batch.long(), neighbor_news_news_id_batch.long())
+
     print(result.shape)
+    print(result[: 5])
+
+
 
 
