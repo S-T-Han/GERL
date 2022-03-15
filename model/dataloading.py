@@ -1,7 +1,10 @@
+import sys
+sys.path.append('/home/sthan/Codefield/python/GERL')
+
 import torch
 import dgl
 import numpy as np
-from data import MIND
+from model.data import MIND
 
 import time
 
@@ -38,7 +41,6 @@ class DataLoader():
             reordered_idx = np.array([
                 i // (neg_prop + 1) if i % (neg_prop + 1) == 0 else (i + pos_size - (i // (neg_prop + 1)) - 1) 
                 for i in range(total_batch_size)])
-            print(reordered_idx)
             user_nid_batch, label_batch = user_nid_batch[reordered_idx], label_batch[reordered_idx]
            
             user_user_id_batch, news_title_batch, news_topic_batch = \

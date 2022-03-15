@@ -182,7 +182,6 @@ class GolVe():
 
 if __name__ == '__main__':
     mind = MIND()
-    golve = GolVe()
-    embed = golve.buildEmbedding(mind.word_vocab)
-    print(embed[0: 5, 0: 5])
-    print(embed.shape)
+    g = mind.graphs['train']
+    assert isinstance(g, dgl.DGLHeteroGraph)
+    print(g.num_edges())

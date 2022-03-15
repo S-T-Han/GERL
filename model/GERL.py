@@ -1,5 +1,4 @@
 import sys
-import os
 sys.path.append('/home/sthan/Codefield/python/GERL/')
 
 import torch
@@ -8,8 +7,8 @@ import torch.nn.functional as F
 import dgl
 
 from utils.nn import TransFormer, Attention
-from data import MIND, GolVe
-from dataloading import DataLoader, NewsSampler, UserSampler, NegativeSampler
+from model.data import MIND, GolVe
+from model.dataloading import DataLoader, NewsSampler, UserSampler, NegativeSampler
 
 
 class GERL(nn.Module):
@@ -42,12 +41,16 @@ class GERL(nn.Module):
 
         user_news_title_batch, user_news_topic_batch = \
             self.title_embed(user_news_title_batch), self.topic_embed(user_news_topic_batch)
-        transformer_batch = torch.zeros(
-            user_news_title_batch.shape[0], user_news_title_batch.shape[1], 
-            user_news_title_batch.shape[-1] + user_news_topic_batch.shape[-1])
-        for i in range(0, user_news_title_batch.shape[1]):
-            transformer_batch[:, i] = self.transformer(
-                user_news_title_batch[:, i], user_news_topic_batch[:, i])
+        user_news_title_batch, user_news_topic_batch = \
+            torch.chunk(user_news_title_batch, user_news_title_batch.shape[1], dim=1), \
+            torch.chunk(user_news_topic_batch, user_news_topic_batch.shape[1], dim=1)
+        transformer_batch = []
+        for i in range(0, len(user_news_title_batch)):
+            transformer_batch.append(
+                (self.transformer(
+                    user_news_title_batch[i].squeeze(dim=1), user_news_topic_batch[i].squeeze(dim=1)))
+                .unsqueeze(dim=1))
+        transformer_batch = torch.cat(transformer_batch, dim=1)
         transformer_batch = self.transformer_attention(transformer_batch)
 
         neighbor_users_user_id_batch = self.user_id_embed(neighbor_users_user_id_batch)
@@ -68,12 +71,16 @@ class GERL(nn.Module):
 
         neighbor_news_title_batch, neighbor_news_topic_batch = \
             self.title_embed(neighbor_news_title_batch), self.topic_embed(neighbor_news_topic_batch)
-        neighbor_transformer_batch = torch.zeros(
-            neighbor_news_title_batch.shape[0], neighbor_news_title_batch.shape[1], 
-            neighbor_news_title_batch.shape[-1] + neighbor_news_topic_batch.shape[-1])
-        for i in range(0, neighbor_news_title_batch.shape[1]):
-            neighbor_transformer_batch[:, i] = self.transformer(
-                neighbor_news_title_batch[:, i], neighbor_news_topic_batch[:, i])
+        neighbor_news_title_batch, neighbor_news_topic_batch = \
+            torch.chunk(neighbor_news_title_batch, neighbor_news_title_batch.shape[1], dim=1), \
+            torch.chunk(neighbor_news_topic_batch, neighbor_news_topic_batch.shape[1], dim=1)
+        neighbor_transformer_batch = []
+        for i in range(0, len(neighbor_news_title_batch)):
+            neighbor_transformer_batch.append(
+                (self.transformer(
+                    neighbor_news_title_batch[i].squeeze(dim=1), neighbor_news_topic_batch[i].squeeze(dim=1)))
+                .unsqueeze(dim=1))
+        neighbor_transformer_batch = torch.cat(neighbor_transformer_batch, dim=1)
         neighbor_transformer_batch = self.transformer_attention(neighbor_transformer_batch)
 
         neighbor_news_news_id_batch = self.news_id_embed(neighbor_news_news_id_batch)
@@ -111,11 +118,9 @@ class GERLLoss(nn.Module):
         self.neg_prop = neg_prop
 
     def forward(self, score_batch):
+        assert (score_batch > 0.0).all() and (score_batch < 1.0).all()
         score_batch = score_batch.view(-1, 1 + self.neg_prop)
-        print(score_batch)
-        print(torch.sum(score_batch, dim=-1))
         loss_batch = score_batch[:, 0] / torch.sum(score_batch, dim=-1)
-        print(loss_batch)
         loss_batch = torch.log(loss_batch)
         loss = -torch.sum(loss_batch)
 
