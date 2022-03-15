@@ -98,11 +98,28 @@ class GERL(nn.Module):
         news_code_batch = self.newsEncoder(
             news_title_batch, news_topic_batch, 
             neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch)
-        score = torch.bmm(user_code_batch.unsqueeze(dim=1), news_code_batch.unsqueeze(dim=2))
-        score = score.squeeze(dim=1)
-        score = torch.sigmoid(score)
+        score_batch = torch.bmm(user_code_batch.unsqueeze(dim=1), news_code_batch.unsqueeze(dim=2))
+        score_batch = score_batch.squeeze(dim=1)
+        score_batch = torch.sigmoid(score_batch)
 
-        return score
+        return score_batch
+
+
+class GERLLoss(nn.Module):
+    def __init__(self, neg_prop):
+        super(GERLLoss, self).__init__()
+        self.neg_prop = neg_prop
+
+    def forward(self, score_batch):
+        score_batch = score_batch.view(-1, 1 + self.neg_prop)
+        print(score_batch)
+        print(torch.sum(score_batch, dim=-1))
+        loss_batch = score_batch[:, 0] / torch.sum(score_batch, dim=-1)
+        print(loss_batch)
+        loss_batch = torch.log(loss_batch)
+        loss = -torch.sum(loss_batch)
+
+        return loss
 
 
 if __name__ == '__main__':
@@ -125,7 +142,7 @@ if __name__ == '__main__':
     (user_news_title_batch, user_news_topic_batch, _), \
     (neighbor_users_user_id_batch, _), \
     (news_title_batch, news_topic_batch), \
-    (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, _), _ = next(dataloader.load(batch_size=10))
+    (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, _), label_batch = next(dataloader.load(batch_size=10))
 
     print(g.ndata['news_id']['news'].max())
     print(neighbor_news_news_id_batch.max().long())
@@ -136,7 +153,7 @@ if __name__ == '__main__':
         title_vocab_size, 300, 6, 128, 
         topic_vocab_size, 100, 128, 
         news_id_vocab_size, 100, 128, 
-        golve.buildEmbedding(mind.word_vocab))
+        word_vec=None)
     result = model(
         user_user_id_batch.long(), 
         user_news_title_batch.long(), user_news_topic_batch.long(), 
@@ -147,6 +164,8 @@ if __name__ == '__main__':
     print(result.shape)
     print(result[: 5])
 
-
+    print(label_batch)
+    loss_fn = GERLLoss(neg_prop=4)
+    print(loss_fn(label_batch))
 
 

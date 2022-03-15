@@ -34,8 +34,12 @@ class DataLoader():
                 torch.cat((pos_user_nid_batch, neg_user_nid_batch)), torch.cat((pos_news_nid_batch, neg_news_nid_batch))
             label_batch = torch.cat((torch.ones_like(pos_user_nid_batch), torch.zeros_like(neg_user_nid_batch)))
             total_batch_size = len(user_nid_batch)
-            shuffled_idx = np.random.permutation(np.arange(0, total_batch_size))
-            user_nid_batch, label_batch = user_nid_batch[shuffled_idx], label_batch[shuffled_idx]
+            pos_size, neg_prop = len(pos_news_nid_batch), len(neg_news_nid_batch) // len(pos_news_nid_batch)
+            reordered_idx = np.array([
+                i // (neg_prop + 1) if i % (neg_prop + 1) == 0 else (i + pos_size - (i // (neg_prop + 1)) - 1) 
+                for i in range(total_batch_size)])
+            print(reordered_idx)
+            user_nid_batch, label_batch = user_nid_batch[reordered_idx], label_batch[reordered_idx]
            
             user_user_id_batch, news_title_batch, news_topic_batch = \
                 self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch], \
@@ -148,11 +152,10 @@ if __name__ == '__main__':
         user_news_max_len=10, neighbor_users_max_len=15, neighbor_news_max_len=15)
     t1 = time.time()
     i = 0
-    for everything in dataloader.load(batch_size=128):
-        i += 1
-        print(i)
-        if i > 100:
-            break
+    for everything in dataloader.load(batch_size=5):
+        for one_thing in everything:
+            print(one_thing)
+        break
     t2 = time.time()
     print(i)
     print("{}ms".format((t2 -t1) * 1000))

@@ -17,7 +17,7 @@ class Attention(nn.Module):
         attn = F.softmax(h, dim=-1)
         attn = attn.unsqueeze(dim=-1)
         x = torch.mul(attn, x)
-        x = torch.sum(x, -1)
+        x = torch.sum(x, 1)
 
         return x
 
