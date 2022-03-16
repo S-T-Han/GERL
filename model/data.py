@@ -182,6 +182,6 @@ class GolVe():
 
 if __name__ == '__main__':
     mind = MIND()
-    g = mind.graphs['train']
-    assert isinstance(g, dgl.DGLHeteroGraph)
+    g = mind.graphs['dev']
+    print(g)
     print(g.num_edges())

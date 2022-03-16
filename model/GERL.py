@@ -108,7 +108,7 @@ class GERL(nn.Module):
         score_batch = torch.bmm(user_code_batch.unsqueeze(dim=1), news_code_batch.unsqueeze(dim=2))
         score_batch = score_batch.squeeze(dim=1)
         score_batch = torch.sigmoid(score_batch)
-        score_batch = torch.clamp(score_batch, 0.1, 0.9)
+        score_batch = torch.clamp(score_batch, 0.0, 1.0)
 
         return score_batch
 
@@ -119,7 +119,6 @@ class GERLLoss(nn.Module):
         self.neg_prop = neg_prop
 
     def forward(self, score_batch):
-        assert (score_batch > 0.0).all() and (score_batch < 1.0).all()
         score_batch = score_batch.view(-1, 1 + self.neg_prop)
         loss_batch = score_batch[:, 0] / torch.sum(score_batch, dim=-1)
         loss_batch = torch.log(loss_batch)

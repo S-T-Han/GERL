@@ -41,7 +41,7 @@ class DataLoader():
             reordered_idx = np.array([
                 i // (neg_prop + 1) if i % (neg_prop + 1) == 0 else (i + pos_size - (i // (neg_prop + 1)) - 1) 
                 for i in range(total_batch_size)])
-            user_nid_batch, label_batch = user_nid_batch[reordered_idx], label_batch[reordered_idx]
+            user_nid_batch, news_nid_batch, label_batch = user_nid_batch[reordered_idx], news_nid_batch[reordered_idx], label_batch[reordered_idx]
            
             user_user_id_batch, news_title_batch, news_topic_batch = \
                 self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch], \
