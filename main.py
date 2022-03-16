@@ -30,7 +30,7 @@ def train(model, loss_fn, optimizer, batch_iter, device):
             neighbor_users_user_id_batch.long().to(device),
             news_title_batch.long().to(device), news_topic_batch.long().to(device), 
             neighbor_news_title_batch.long().to(device), neighbor_news_topic_batch.long().to(device), neighbor_news_news_id_batch.long().to(device))
-        loss = loss_fn(score)
+        loss = loss_fn(score.squeeze(dim=-1), label_batch.float().to(device))
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -70,8 +70,8 @@ if __name__ == "__main__":
         word_vec=golve.buildEmbedding(mind.word_vocab))
     assert isinstance(model, nn.Module)
     model.to(device)
-    loss_fn = GERLLoss(neg_prop=4)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    loss_fn = nn.BCELoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
     train(
         model=model, loss_fn=loss_fn, optimizer=optimizer, 

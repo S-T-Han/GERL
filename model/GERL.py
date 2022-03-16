@@ -108,6 +108,7 @@ class GERL(nn.Module):
         score_batch = torch.bmm(user_code_batch.unsqueeze(dim=1), news_code_batch.unsqueeze(dim=2))
         score_batch = score_batch.squeeze(dim=1)
         score_batch = torch.sigmoid(score_batch)
+        score_batch = torch.clamp(score_batch, 0.1, 0.9)
 
         return score_batch
 
