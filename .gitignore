@@ -3,3 +3,4 @@
 *.zip
 *.vec
 *.pt
+*__pycache__*

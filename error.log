@@ -1,0 +1,11 @@
+  0%|          | 0/16061 [00:00<?, ?it/s]  0%|          | 0/16061 [00:01<?, ?it/s, loss=108]  0%|          | 1/16061 [00:02<10:41:36,  2.40s/it, loss=108]  0%|          | 1/16061 [00:03<10:41:36,  2.40s/it, loss=105]  0%|          | 2/16061 [00:03<6:44:15,  1.51s/it, loss=105]   0%|          | 2/16061 [00:04<6:44:15,  1.51s/it, loss=104]  0%|          | 3/16061 [00:04<5:35:44,  1.25s/it, loss=104]  0%|          | 3/16061 [00:05<5:35:44,  1.25s/it, loss=101]  0%|          | 4/16061 [00:05<4:58:57,  1.12s/it, loss=101]  0%|          | 4/16061 [00:06<4:58:57,  1.12s/it, loss=108]  0%|          | 5/16061 [00:06<4:40:36,  1.05s/it, loss=108]  0%|          | 5/16061 [00:06<4:40:36,  1.05s/it, loss=104]  0%|          | 6/16061 [00:06<4:23:26,  1.02it/s, loss=104]  0%|          | 6/16061 [00:07<4:23:26,  1.02it/s, loss=103]  0%|          | 7/16061 [00:07<4:21:18,  1.02it/s, loss=103]  0%|          | 7/16061 [00:08<4:21:18,  1.02it/s, loss=108]  0%|          | 8/16061 [00:08<4:17:20,  1.04it/s, loss=108]  0%|          | 8/16061 [00:09<4:17:20,  1.04it/s, loss=109]  0%|          | 9/16061 [00:09<4:11:03,  1.07it/s, loss=109]  0%|          | 9/16061 [00:10<4:11:03,  1.07it/s, loss=112]  0%|          | 10/16061 [00:10<4:10:09,  1.07it/s, loss=112]  0%|          | 10/16061 [00:11<4:10:09,  1.07it/s, loss=107]  0%|          | 11/16061 [00:11<4:13:10,  1.06it/s, loss=107]  0%|          | 11/16061 [00:12<4:13:10,  1.06it/s, loss=106]  0%|          | 12/16061 [00:12<4:10:51,  1.07it/s, loss=106]  0%|          | 12/16061 [00:13<4:10:51,  1.07it/s, loss=108]  0%|          | 13/16061 [00:13<4:09:26,  1.07it/s, loss=108]  0%|          | 13/16061 [00:14<4:55:48,  1.11s/it, loss=108]
+Traceback (most recent call last):
+  File "/home/sthan/Codefield/python/GERL/main.py", line 121, in <module>
+    train(
+  File "/home/sthan/Codefield/python/GERL/main.py", line 39, in train
+    loss.backward()
+  File "/home/sthan/.conda/envs/graph_learning/lib/python3.9/site-packages/torch/_tensor.py", line 307, in backward
+    torch.autograd.backward(self, gradient, retain_graph, create_graph, inputs=inputs)
+  File "/home/sthan/.conda/envs/graph_learning/lib/python3.9/site-packages/torch/autograd/__init__.py", line 154, in backward
+    Variable._execution_engine.run_backward(
+KeyboardInterrupt
