@@ -163,7 +163,11 @@ class MIND_small():
         self.topic_vocab_path = 'dgl_small/vocab/topic_vocab.json'
         self.word_vocab_path = 'dgl_small/vocab/word_vocab.json'
         self.graphs_path = {'train': 'dgl_small/train/graph.bin', 'dev': 'dgl_small/dev/graph.bin'}
+        self.eval_path = 'dgl_small/eval/tensors.pt'
 
+        self.behaviors = {
+            'train': self.preprocessBehaviors('train'), 'dev': self.preprocessBehaviors('dev')}
+        self.news = {'train': self.preprocessNews('train'), 'dev': self.preprocessNews('dev')}
         if os.path.exists(self.data_path + 'dgl_small'):
             print('Find preprocessed files')
             with open(self.data_path + self.user_id_vocab_path, 'r', encoding='utf-8') as file:
@@ -175,15 +179,19 @@ class MIND_small():
             with open(self.data_path + self.word_vocab_path, 'r', encoding='utf-8') as file:
                 self.word_vocab = json.load(file)
             self.graphs = {'train': self.loadGraph('train'), 'dev': self.loadGraph('dev')}
+            tensors_dict = torch.load(self.data_path + self.eval_path)
+            self.eval_user_nid, self.eval_user_len, self.eval_news_nid, self.eval_label = \
+                tensors_dict['eval_user_nid'], tensors_dict['eval_user_len'], \
+                tensors_dict['eval_news_nid'], \
+                tensors_dict['eval_label']
         else:
             print('Preprocessed files do not exist')
-            self.behaviors = {
-                'train': self.preprocessBehaviors('train'), 'dev': self.preprocessBehaviors('dev')}
-            self.news = {'train': self.preprocessNews('train'), 'dev': self.preprocessNews('dev')}
             self.user_id_vocab = self.buildUserIdVocab()
             self.news_id_vocab, self.topic_vocab, self.word_vocab = \
                 self.buildNewsVocabs()
             self.graphs = {'train': self.buildGraph('train'), 'dev': self.buildGraph('dev')}
+            self.eval_user_nid, self.eval_user_len, self.eval_news_nid, self.eval_label = \
+                self.buildEval()
             self.save()
 
     def buildGraph(self, subset):
@@ -193,9 +201,9 @@ class MIND_small():
         user_id_idx = []
         news_id_idx, topic_idx, title_idx = [], [], []
         news_id_to_news_nid, nid = {}, 0
-        for user_nid, (user_id, imp_log) in enumerate(behaviors.items()):
+        for user_nid, (user_id, (pos_imp_log, neg_imp_log)) in enumerate(behaviors.items()):
             user_id_idx.append(self.user_id_vocab.get(user_id, 1))
-            for news_id in imp_log:
+            for news_id in pos_imp_log:
                 topic, title = news[news_id]
                 if news_id not in news_id_to_news_nid.keys():
                     news_id_to_news_nid.update({news_id: nid})
@@ -217,6 +225,34 @@ class MIND_small():
 
         return graph
 
+    def buildEval(self):
+        print('Building evluation data...')
+        behaviors, news = self.behaviors['dev'], self.news['dev']
+        news_id_to_news_nid, nid = {}, 0
+        eval_user_nid, eval_user_len, eval_news_nid, eval_label = [], [], [], []
+        for user_nid, (user_id, (pos_imp_log, neg_imp_log)) in enumerate(behaviors.items()):
+            imp_log = pos_imp_log + neg_imp_log
+            eval_user_nid.append(torch.tensor([user_nid] * len(imp_log), dtype=torch.long))
+            eval_user_len.append(len(imp_log))
+            for news_id in pos_imp_log:
+                if news_id not in news_id_to_news_nid.keys():
+                    news_id_to_news_nid.update({news_id: nid})
+                    nid += 1
+        for _, (pos_imp_log, neg_imp_log) in behaviors.items():
+            imp_log = pos_imp_log + neg_imp_log
+            eval_news_nid.append(
+                torch.tensor([news_id_to_news_nid.get(news_id, 0) for news_id in imp_log], dtype=torch.long))
+            eval_label.append(
+                torch.cat([
+                    torch.ones(len(pos_imp_log), dtype=torch.long), 
+                    torch.zeros(len(neg_imp_log), dtype=torch.long)]))
+        eval_user_nid = torch.cat(eval_user_nid)
+        eval_user_len = torch.tensor(eval_user_len)
+        eval_news_nid = torch.cat(eval_news_nid)
+        eval_label = torch.cat(eval_label)
+
+        return eval_user_nid, eval_user_len, eval_news_nid, eval_label
+
     def buildUserIdVocab(self):
         print('Building user_id vocab...')
         user_id_vocab = {key: (i + 2) for i, key in enumerate(self.behaviors['train'].keys())}
@@ -225,7 +261,7 @@ class MIND_small():
         return user_id_vocab
 
     def buildNewsVocabs(self):
-        print('Building news vocab')
+        print('Building news vocab...')
         news_id_vocab, num_news_id = {'<pad>': 0, '<unk>': 1}, 2
         topic_vocab, num_topics = {'<pad>': 0, '<unk>': 1}, 2
         word_vocab, num_words = {'<pad>': [0, np.inf], '<unk>': [1, np.inf]}, 2
@@ -253,8 +289,9 @@ class MIND_small():
             for i, line in enumerate(file):
                 line = line.strip('\n').split('\t')
                 user_id, imp_log = line[1], line[4].split(' ')
-                imp_log = [log.split('-')[0] for log in imp_log if log.split('-')[1] == '1']
-                behaviors.update({user_id: imp_log})
+                pos_imp_log = [log.split('-')[0] for log in imp_log if log.split('-')[1] == '1']
+                neg_imp_log = [log.split('-')[0] for log in imp_log if log.split('-')[1] == '0']
+                behaviors.update({user_id: (pos_imp_log, neg_imp_log)})
 
         return behaviors
 
@@ -275,6 +312,7 @@ class MIND_small():
         os.makedirs(self.data_path + 'dgl_small/vocab')
         for subset in ('train', 'dev'):
             os.makedirs(self.data_path + 'dgl_small/' + subset)
+        os.makedirs(self.data_path + 'dgl_small/eval')
         with open(self.data_path + self.user_id_vocab_path, 'w', encoding='utf-8') as file:
             json_str = json.dumps(self.user_id_vocab, indent=4)
             file.write(json_str)
@@ -289,13 +327,17 @@ class MIND_small():
             file.write(json_str)
         for subset in ('train', 'dev'):
             dgl.save_graphs(self.data_path + self.graphs_path[subset], [self.graphs[subset]])
+        torch.save({
+            'eval_user_nid': self.eval_user_nid, 'eval_user_len': self.eval_user_len, 
+            'eval_news_nid': self.eval_news_nid, 
+            'eval_label': self.eval_label}, 
+            self.data_path + self.eval_path)
 
     def loadGraph(self, subset):
         glist, _ = dgl.load_graphs(self.data_path + self.graphs_path[subset])
         g = glist[0]
 
         return g
-
 
 
 class GolVe():
@@ -325,4 +367,8 @@ class GolVe():
 
 
 if __name__ == '__main__':
-    mind = MIND()
+    mind = MIND_small()
+    print(mind.eval_user_nid[: 5])
+    print(mind.eval_news_nid[: 5])
+    print(mind.eval_user_len[: 5])
+    print(mind.eval_label[: 5])

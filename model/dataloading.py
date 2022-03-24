@@ -96,7 +96,6 @@ class EvalLoader():
 
         for user_nid in user_nid_total:
             pos_user_news_nid = pos_news_nid_total[torch.where(pos_user_nid_total == user_nid)]
-            news_nid_total = news_nid_total[np.random.permutation(np.arange(0, len(news_nid_total)))]
             for start, end in zip(I[: -2], I[1: ]):
                 total_batch_size = end - start
                 user_nid_batch, news_nid_batch = torch.tensor([user_nid] * total_batch_size), news_nid_total[start: end]
