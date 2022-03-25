@@ -291,7 +291,11 @@ class MIND_small():
                 user_id, imp_log = line[1], line[4].split(' ')
                 pos_imp_log = [log.split('-')[0] for log in imp_log if log.split('-')[1] == '1']
                 neg_imp_log = [log.split('-')[0] for log in imp_log if log.split('-')[1] == '0']
-                behaviors.update({user_id: (pos_imp_log, neg_imp_log)})
+                if user_id not in behaviors.keys():
+                    behaviors.update({user_id: (pos_imp_log, neg_imp_log)})
+                else:
+                    behaviors[user_id][0].extend(pos_imp_log)
+                    behaviors[user_id][1].extend(neg_imp_log)
 
         return behaviors
 
@@ -365,10 +369,15 @@ class GolVe():
         return embedding
 
 
-
 if __name__ == '__main__':
     mind = MIND_small()
     print(mind.eval_user_nid[: 5])
     print(mind.eval_news_nid[: 5])
     print(mind.eval_user_len[: 5])
     print(mind.eval_label[: 5])
+    for user_id, (pos_imp_log, neg_imp_log) in mind.behaviors['dev'].items():
+        print(user_id)
+        print(pos_imp_log)
+        print(neg_imp_log)
+        print(len(pos_imp_log + neg_imp_log))
+        break
