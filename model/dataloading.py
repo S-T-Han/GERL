@@ -80,62 +80,58 @@ class DataLoader():
 class EvalLoader():
     def __init__(
         self, 
+        user_nid, news_nid, label,
         g, user_sampler, news_sampler, 
         user_news_max_len, neighbor_users_max_len, neighbor_news_max_len):
         assert isinstance(g, dgl.DGLHeteroGraph)
+        self.user_nid, self.news_nid, self.label = \
+            user_nid, news_nid, label
         self.g = g
         self.user_sampler, self.news_sampler = user_sampler, news_sampler
         self.user_news_max_len, self.neighbor_users_max_len, self.neighbor_news_max_len = \
             user_news_max_len, neighbor_users_max_len, neighbor_news_max_len
 
     def load(self, batch_size):
-        user_nid_total, news_nid_total = \
-            torch.arange(0, self.g.num_nodes('user')), torch.arange(0, self.g.num_nodes('news'))
-        pos_user_nid_total, pos_news_nid_total = self.g.out_edges(user_nid_total, etype='clicked')
-        I = np.arange(0, self.g.num_nodes('news'), batch_size)
+        I = np.arange(0, len(self.user_nid), batch_size)
+        for start, end in zip(I[: -2], I[1: ]):
+            user_nid_batch, news_nid_batch, label_batch = \
+                self.user_nid[start: end], self.news_nid[start: end], self.label[start: end]
+            total_batch_size = batch_size
 
-        for user_nid in user_nid_total:
-            pos_user_news_nid = pos_news_nid_total[torch.where(pos_user_nid_total == user_nid)]
-            for start, end in zip(I[: -2], I[1: ]):
-                total_batch_size = end - start
-                user_nid_batch, news_nid_batch = torch.tensor([user_nid] * total_batch_size), news_nid_total[start: end]
-                label_batch = torch.tensor([int(news_nid in pos_user_news_nid) for news_nid in news_nid_batch])
+            user_user_id_batch, news_title_batch, news_topic_batch = \
+                self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch], \
+                self.g.ndata['topic']['news'][news_nid_batch]
+            user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch = \
+                torch.zeros((total_batch_size, self.user_news_max_len, 30), dtype=torch.long), \
+                torch.zeros((total_batch_size, self.user_news_max_len), dtype=torch.long), \
+                torch.zeros((total_batch_size, self.neighbor_users_max_len), dtype=torch.long)
+            user_news_effective_len, neighbor_users_effective_len = \
+                torch.zeros(total_batch_size, dtype=torch.long), torch.zeros(total_batch_size, dtype=torch.long)
+            neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch = \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len, 30), dtype=torch.long), \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len), dtype=torch.long), \
+                torch.zeros((total_batch_size, self.neighbor_news_max_len), dtype=torch.long)
+            neighbor_news_effective_len = torch.zeros(total_batch_size, dtype=torch.long)
 
-                user_user_id_batch, news_title_batch, news_topic_batch = \
-                    self.g.ndata['user_id']['user'][user_nid_batch], self.g.ndata['title']['news'][news_nid_batch], \
-                    self.g.ndata['topic']['news'][news_nid_batch]
-                user_news_title_batch, user_news_topic_batch, neighbor_users_user_id_batch = \
-                    torch.zeros((total_batch_size, self.user_news_max_len, 30), dtype=torch.long), \
-                    torch.zeros((total_batch_size, self.user_news_max_len), dtype=torch.long), \
-                    torch.zeros((total_batch_size, self.neighbor_users_max_len), dtype=torch.long)
-                user_news_effective_len, neighbor_users_effective_len = \
-                    torch.zeros(total_batch_size, dtype=torch.long), torch.zeros(total_batch_size, dtype=torch.long)
-                neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch = \
-                    torch.zeros((total_batch_size, self.neighbor_news_max_len, 30), dtype=torch.long), \
-                    torch.zeros((total_batch_size, self.neighbor_news_max_len), dtype=torch.long), \
-                    torch.zeros((total_batch_size, self.neighbor_news_max_len), dtype=torch.long)
-                neighbor_news_effective_len = torch.zeros(total_batch_size, dtype=torch.long)
+            for i, (user_nid, news_nid) in enumerate((zip(user_nid_batch, news_nid_batch))):
+                user_news_nid, neighbor_users_nid = self.user_sampler(self.g, user_nid)
+                user_news_effective_len[i] = len(user_news_nid)
+                user_news_title_batch[i][0: len(user_news_nid)] = self.g.ndata['title']['news'][user_news_nid]
+                user_news_topic_batch[i][0: len(user_news_nid)] = self.g.ndata['topic']['news'][user_news_nid]
+                neighbor_users_effective_len[i] = len(neighbor_users_nid)
+                neighbor_users_user_id_batch[i][0: len(neighbor_users_nid)] = self.g.ndata['user_id']['user'][neighbor_users_nid]
 
-                for i, (user_nid, news_nid) in enumerate((zip(user_nid_batch, news_nid_batch))):
-                    user_news_nid, neighbor_users_nid = self.user_sampler(self.g, user_nid)
-                    user_news_effective_len[i] = len(user_news_nid)
-                    user_news_title_batch[i][0: len(user_news_nid)] = self.g.ndata['title']['news'][user_news_nid]
-                    user_news_topic_batch[i][0: len(user_news_nid)] = self.g.ndata['topic']['news'][user_news_nid]
-                    neighbor_users_effective_len[i] = len(neighbor_users_nid)
-                    neighbor_users_user_id_batch[i][0: len(neighbor_users_nid)] = self.g.ndata['user_id']['user'][neighbor_users_nid]
-
-                    neighbor_news_nid = self.news_sampler(self.g, news_nid)
-                    neighbor_news_effective_len[i] = len(neighbor_news_nid)
-                    neighbor_news_title_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['title']['news'][neighbor_news_nid]
-                    neighbor_news_topic_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['topic']['news'][neighbor_news_nid]
-                    neighbor_news_news_id_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['news_id']['news'][neighbor_news_nid]
-                    
-                yield user_user_id_batch, \
-                    (user_news_title_batch, user_news_topic_batch, user_news_effective_len), (neighbor_users_user_id_batch, neighbor_users_effective_len), \
-                    (news_title_batch, news_topic_batch), \
-                    (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, neighbor_news_effective_len), \
-                    label_batch, \
-                    (user_nid, start, end)
+                neighbor_news_nid = self.news_sampler(self.g, news_nid)
+                neighbor_news_effective_len[i] = len(neighbor_news_nid)
+                neighbor_news_title_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['title']['news'][neighbor_news_nid]
+                neighbor_news_topic_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['topic']['news'][neighbor_news_nid]
+                neighbor_news_news_id_batch[i][0: len(neighbor_news_nid)] = self.g.ndata['news_id']['news'][neighbor_news_nid]
+                
+            yield user_user_id_batch, \
+                (user_news_title_batch, user_news_topic_batch, user_news_effective_len), (neighbor_users_user_id_batch, neighbor_users_effective_len), \
+                (news_title_batch, news_topic_batch), \
+                (neighbor_news_title_batch, neighbor_news_topic_batch, neighbor_news_news_id_batch, neighbor_news_effective_len), \
+                label_batch, \
 
 
 class NegativeSampler():
@@ -209,18 +205,12 @@ class NewsSampler():
 
 if __name__ == '__main__':
     mind = MIND_small()
-    g = mind.graphs['dev']
     dataloader = EvalLoader(
-        g, UserSampler(15, 10), NewsSampler(10), 
+        mind.eval_user_nid, mind.eval_news_nid, mind.eval_label, 
+        mind.graphs['dev'], UserSampler(user_limit=15, news_limit=10), NewsSampler(news_limit=10),
         user_news_max_len=10, neighbor_users_max_len=15, neighbor_news_max_len=10)
-    t1 = time.time()
-    i = 0
     for everything in dataloader.load(5):
-        for one_thing in everything:
-            print('Hello')
-            print(one_thing)
+        for onething in everything:
+            print(onething)
         break
-    t2 = time.time()
-    print(i)
-    print("{}s".format(t2 -t1))
     
